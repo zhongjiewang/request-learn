@@ -13,7 +13,7 @@
 //    limitations under the License.
 
 'use strict'
-
+console.log('------indext.js--------------');
 var extend                = require('extend')
   , cookies               = require('./lib/cookies')
   , helpers               = require('./lib/helpers')
@@ -23,6 +23,7 @@ var paramsHaveRequestBody = helpers.paramsHaveRequestBody
 
 // organize params for patch, post, put, head, del
 function initParams(uri, options, callback) {
+  console.log('---index---initParams----');
   if (typeof options === 'function') {
     callback = options
   }
@@ -33,7 +34,10 @@ function initParams(uri, options, callback) {
   } else if (typeof uri === 'string') {
     extend(params, {uri: uri})
   } else {
+    // console.log('uri--',uri);
     extend(params, uri)
+    // console.log('extend--',params);
+
   }
 
   params.callback = callback || params.callback
@@ -81,13 +85,15 @@ request.cookie = function (str) {
 }
 
 function wrapRequestMethod (method, options, requester, verb) {
-
   return function (uri, opts, callback) {
     var params = initParams(uri, opts, callback)
+    // console.log('--wrapRequestMethod--------',options ,'\nparams--',params);
 
     var target = {}
+    //deep = true,深拷贝, 两个对象之间互不影响, 浅拷贝, 两个对象指向同一地址,修改一个,另外一个也会修改
     extend(true, target, options, params)
 
+    // console.log('target--', target);
     target.pool = params.pool || options.pool
 
     if (verb) {
@@ -137,6 +143,8 @@ request.forever = function (agentOptions, optionsArg) {
   options.forever = true
   return request.defaults(options)
 }
+
+console.log('----------index-----export-----------');
 
 // Exports
 

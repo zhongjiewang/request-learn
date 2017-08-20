@@ -1,5 +1,5 @@
 'use strict'
-
+console.log('------------request----------------------');
 var http = require('http')
   , https = require('https')
   , url = require('url')
@@ -64,6 +64,7 @@ function filterOutReservedFunctions(reserved, options) {
   for (var i in options) {
     var isReserved = !(reserved.indexOf(i) === -1)
     var isFunction = (typeof options[i] === 'function')
+    // console.log('isReserved', isReserved, isFunction, options[i]);
     if (!(isReserved && isFunction)) {
       object[i] = options[i]
     }
@@ -110,12 +111,15 @@ function Request (options) {
   }
 
   stream.Stream.call(self)
-  var reserved = Object.keys(Request.prototype)
+  var reserved = Object.keys(Request.prototype) // reserved 是保留的
+  // console.log('reserved--',reserved, '\noptions', options);
   var nonReserved = filterForNonReserved(reserved, options)
-
+  // console.log('nonReserved', nonReserved);
   extend(self, nonReserved)
+  // console.log('self', self);
   options = filterOutReservedFunctions(reserved, options)
-
+  // console.log('out reserved--options---',options);
+  
   self.readable = true
   self.writable = true
   if (options.method) {
@@ -129,7 +133,8 @@ function Request (options) {
   self._tunnel = new Tunnel(self)
   self.init(options)
 }
-
+//inherits 继承的意思;
+//Sub 仅仅继承了Base 在原型中定义的函数，而构造函数内部创造的 base 属 性和 sayHello 函数都没有被 Sub 继承。
 util.inherits(Request, stream.Stream)
 
 // Debugging
@@ -142,6 +147,7 @@ function debug() {
 Request.prototype.debug = debug
 
 Request.prototype.init = function (options) {
+  console.log('request ----init---------');
   // init() contains all the code to setup the request object.
   // the actual outgoing request is not started until start() is called
   // this function is called from both the constructor and on redirect.
@@ -187,6 +193,7 @@ Request.prototype.init = function (options) {
       self._callbackCalled = true
       self._callback.apply(self, arguments)
     }
+    //* bind 是返回对应函数，便于稍后调用；apply 、call 则是立即调用 。
     self.on('error', self.callback.bind())
     self.on('complete', self.callback.bind(self, null))
   }

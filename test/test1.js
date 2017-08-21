@@ -2,6 +2,22 @@ process.env.NODE_DEBUG = 'request';
 var request = require('request');
 var assert = require('assert');
 var fs = require('fs');
+var now = require('performance-now');
+
+// console.log('setImmediate--+++++',setImmediate);
+
+// function MyThing(options) {
+//   this.setupOptions(options);
+
+//   process.nextTick(() => {
+//     this.startDoingStuff();
+//   });
+// }
+
+// const thing = new MyThing();
+// thing.getReadyForStuff();
+
+
 // var extend = require('extend');
 // let targetObject = { 
 //     a: '888888'
@@ -10,7 +26,7 @@ var fs = require('fs');
 //     b:'9999'
 // }
 // let c  = extend(targetObject, object1);
-// console.log(c);
+// console.log('=======');
 
 // console.log(process.env.NODE_DEBUG);
 
@@ -35,12 +51,28 @@ var fs = require('fs');
 
 // console.log(Object.keys(obj));
 
- // 
+  var start = now();
+  
+  // Execute the code being timed.
+  for (let i = 0; i <= 10 ; i++) {
+      console.log('i',i);
+  }  
+  // Take a final timestamp.
+  //返回一个时间戳,以毫秒为单位,精确到千分之一毫秒
+  var end = now();
+  
+  // Calculate the time taken and output the result in the console
+  console.log('doTasks took ' + (end - start) + ' milliseconds to execute.');
+
+
+
 let options = {
     baseUrl : '',
     url: 'http://www.baidu.com',
     method: 'GET',
+    timeout: 1000
 }
+
 
 var baseRequest = request.defaults({
   headers:  [{

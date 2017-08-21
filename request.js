@@ -96,7 +96,7 @@ function responseToJSON() {
 
 function Request (options) {
   // if given the method property in options, set property explicitMethod to true
-
+// console.log('options--------',options);
   // extend the Request instance with any non-reserved properties
   // remove any reserved functions from the options object
   // set Request instance to be readable and writable
@@ -116,7 +116,7 @@ function Request (options) {
   var nonReserved = filterForNonReserved(reserved, options)
   // console.log('nonReserved', nonReserved);
   extend(self, nonReserved)
-  // console.log('self', self);
+  // console.log('self', self.callback);
   options = filterOutReservedFunctions(reserved, options)
   // console.log('out reserved--options---',options);
   
@@ -182,7 +182,7 @@ Request.prototype.init = function (options) {
   }
   self.dests = self.dests || []
   self.__isRequestRequest = true
-
+ // console.log('init callback', self.callback);
   // Protect against double callback
   if (!self._callback && self.callback) {
     self._callback = self.callback
@@ -460,8 +460,10 @@ Request.prototype.init = function (options) {
   var protocol = self.proxy && !self.tunnel ? self.proxy.protocol : self.uri.protocol
     , defaultModules = {'http:':http, 'https:':https}
     , httpModules = self.httpModules || {}
-
+  // console.log('httpModules--------',httpModules, defaultModules);
   self.httpModule = httpModules[protocol] || defaultModules[protocol]
+  // console.log('self-----httpModule--------',self.httpModule);//就是http
+
 
   if (!self.httpModule) {
     return self.emit('error', new Error('Invalid protocol: ' + protocol))
@@ -528,14 +530,17 @@ Request.prototype.init = function (options) {
     //   console.error('You have already piped to this stream. Pipeing twice is likely to break the request.')
     // })
   })
-
+  // 立即定时器,This is executed after all I/O callbacks.类似于转化成异步
+  //setTimeout(function(){},0); process.nextTick
   defer(function () {
     if (self._aborted) {
       return
     }
 
     var end = function () {
+      console.log('---------end------------------');
       if (self._form) {
+        console.log('---------end---------------self._form---',self._form);
         if (!self._auth.hasAuth) {
           self._form.pipe(self)
         }
@@ -544,24 +549,30 @@ Request.prototype.init = function (options) {
         }
       }
       if (self._multipart && self._multipart.chunked) {
+        console.log('---------end---------------self._multipart---',self._multipart);
         self._multipart.body.pipe(self)
       }
+      console.log('---------end------------self._multipart---self.body---');
+
       if (self.body) {
+        console.log('---------end---------------self.body---',self.body);
         if (isstream(self.body)) {
           self.body.pipe(self)
         } else {
           setContentLength()
           if (Array.isArray(self.body)) {
             self.body.forEach(function (part) {
+              console.log('end method ----write-----');
               self.write(part)
             })
           } else {
+            console.log('end method ----write-----');
             self.write(self.body)
           }
           self.end()
         }
       } else if (self.requestBodyStream) {
-        console.warn('options.requestBodyStream is deprecated, please pass the request object to stream.pipe.')
+        console.warn('options.requestBodySstream is deprecated, please pass the request object to stream.pipe.')
         self.requestBodyStream.pipe(self)
       } else if (!self.src) {
         if (self._auth.hasAuth && !self._auth.sentAuth) {
@@ -571,26 +582,30 @@ Request.prototype.init = function (options) {
         if (self.method !== 'GET' && typeof self.method !== 'undefined') {
           self.setHeader('content-length', 0)
         }
+        console.log('---------end------------!self.src---');
         self.end()
       }
     }
 
     if (self._form && !self.hasHeader('content-length')) {
+      
       // Before ending the request, we had to compute the length of the whole form, asyncly
       self.setHeader(self._form.getHeaders(), true)
       self._form.getLength(function (err, length) {
         if (!err && !isNaN(length)) {
           self.setHeader('content-length', length)
         }
+        console.log('will call end 1111111');
         end()
       })
     } else {
+      console.log('will call end  22222222');
       end()
     }
 
     self.ntick = true
   })
-
+  console.log('init-------end---');
 }
 
 Request.prototype.getNewAgent = function () {
@@ -717,17 +732,26 @@ Request.prototype.getNewAgent = function () {
 }
 
 Request.prototype.start = function () {
+  console.log('request-------start-------');
   // start() is called once we are ready to send the outgoing HTTP request.
   // this is usually called on the first write(), end() or on nextTick()
   var self = this
 
-  if (self.timing) {
+  if (self.timing) {//capture 捕获  calculate计算
+    // 所有计时将相对于此请求的开始。 为了做到这一点,
+    // 我们需要捕捉挂钟的开始时间 (通过日期), 紧接着
+    // 由高分辨率计时器 (通过现在 ())。 虽然这两个不会被设置
+    // 在 _exact_ 的同时, 他们应该足够接近, 能够计算
+    // 相对于开始的高分辨率、单调递减时间戳。
     // All timings will be relative to this request's startTime.  In order to do this,
     // we need to capture the wall-clock start time (via Date), immediately followed
     // by the high-resolution timer (via now()).  While these two won't be set
     // at the _exact_ same time, they should be close enough to be able to calculate
     // high-resolution, monotonically non-decreasing timestamps relative to startTime.
+    //常用的时间戳, 精确到毫秒;
     var startTime = new Date().getTime()
+    //这个是更加精确的代码性能测试, 时间精度更高
+    // 返回一个时间戳,以毫秒为单位,精确到千分之一毫秒
     var startTimeNow = now()
   }
 
@@ -757,8 +781,32 @@ Request.prototype.start = function () {
   // should delete it for now since we handle timeouts manually for better
   // consistency with node versions before v6.8.0
   delete reqOptions.timeout
-
+  // console.log('self.httpModule---+++++++',self.httpModule);
   try {
+    console.log('---try httpModules request ---');
+    //http.request(options[, callback])
+    // console.log('reqOptions----',Object.keys(reqOptions));
+    //options 可以是一个对象、或字符串、或 URL 对象。 如果 options 是一个字符串，它会被自动使用 url.parse() 解析。 
+    // If it is a URL object, it will be automatically converted to an ordinary options object.
+    //可选的 callback 参数会作为单次监听器被添加到 'response' 事件。
+
+/***********************http.ClientRequest************************/
+// http.ClientRequest
+// 该对象在 http.request() 内部被创建并返回。 它表示着一个正在处理的请求，其请求头已进入队列。 
+// 请求头仍可使用 setHeader(name, value)、getHeader(name) 和 removeHeader(name) API 进行修改。
+//  实际的请求头会与第一个数据块一起发送或当关闭连接时发送。
+// 要获取响应，需为 'response' 事件添加一个监听器到请求对象上。
+//  当响应头被接收到时，'response' 事件会从请求对象上被触发 。
+
+// 'response' 事件被执行时带有一个参数，该参数是一个 http.IncomingMessage 实例。
+// 在 'response' 事件期间，可以添加监听器到响应对象上，比如监听 'data' 事件。
+// 如果没有添加 'response' 事件处理函数，则响应会被整个丢弃。 
+// 如果添加了 'response' 事件处理函数，则必须消耗完响应对象的数据，
+//可通过调用 response.read()、或添加一个 'data' 事件处理函数、或调用 .resume() 方法。 
+// 数据被消耗完时会触发 'end' 事件。 在数据被读取完之前会消耗内存，可能会造成 'process out of memory' 错误。
+
+// http.request() 返回一个 http.ClientRequest 类的实例。 
+// ClientRequest 实例是一个可写流。 如果需要通过 POST 请求上传一个文件，则写入到 ClientRequest 对象。
     self.req = self.httpModule.request(reqOptions)
   } catch (err) {
     self.emit('error', err)
@@ -782,15 +830,28 @@ Request.prototype.start = function () {
       timeout = self.timeout
     }
   }
-
+// options 可以是一个对象、或字符串、或 URL 对象。 如果 options 是一个字符串，它会被自动使用 url.parse() 解析。 
+// If it is a URL object, it will be automatically converted to an ordinary options object.
+// 可选的 callback 参数会作为单次监听器被添加到 'response' 事件。
   self.req.on('response', self.onRequestResponse.bind(self))
   self.req.on('error', self.onRequestError.bind(self))
   self.req.on('drain', function() {
     self.emit('drain')
   })
+//   http.ClientRequest 类#
+// 新增于: v0.1.17
+// 该对象在 http.request() 内部被创建并返回。 它表示着一个正在处理的请求，其请求头已进入队列。 请求头仍可使用 setHeader(name, value)、getHeader(name) 和 removeHeader(name) API 进行修改。 实际的请求头会与第一个数据块一起发送或当关闭连接时发送。
+// 要获取响应，需为 'response' 事件添加一个监听器到请求对象上。 当响应头被接收到时，'response' 事件会从请求对象上被触发 。 'response' 事件被执行时带有一个参数，该参数是一个 http.IncomingMessage 实例。
+  
+  // 当 socket 被分配到请求后触发
+  //这个对socket的监听,做了些处理, 对普通的请求,暂未有用
+  //Socket的英文原义是“孔”或“插座”Socket非常类似于电话插座。
+  // HTTP是轿车，提供了封装或者显示数据的具体形式；Socket是发动机，提供了网络通信的能力。
   self.req.on('socket', function(socket) {
+    console.log('http req socket ------callback--------'); //scoket 进入tcp一层
     // `._connecting` was the old property which was made public in node v6.1.0
     var isConnecting = socket._connecting || socket.connecting
+    console.log('socket---connecting---',isConnecting); //true
     if (self.timing) {
       self.timings.socket = now() - self.startTimeNow
 
@@ -802,7 +863,7 @@ Request.prototype.start = function () {
         var onConnectTiming = function() {
           self.timings.connect = now() - self.startTimeNow
         }
-
+        // 为指定事件注册一个单次监听器，即 监听器最多只会触发一次，触发后立刻解除该监听器。
         socket.once('lookup', onLookupTiming)
         socket.once('connect', onConnectTiming)
 
@@ -815,6 +876,11 @@ Request.prototype.start = function () {
     }
 
     var setReqTimeout = function() {
+//  此超时设置等待的时间量 * 发送的字节数
+// 从服务器连接后。
+
+// 特别是, 如果服务器无法发送 erroring, 它将非常有用
+// 通过流传输响应的中途数据。
       // This timeout sets the amount of time to wait *between* bytes sent
       // from the server once connected.
       //
@@ -866,10 +932,11 @@ Request.prototype.start = function () {
         setReqTimeout()
       }
     }
-    self.emit('socket', socket)
-  })
-
-  self.emit('request', self.req)
+    console.log('----------+++++++------self.emit(scoret---)---');
+    //self.emit('socket', socket)  //这两行代码现在 并没有起作用, 并没有做 监听 self.on('socket');
+  }) // 都是在 req.scoket 回调中
+console.log('----------+++++++------self.emit(request)---');
+  // self.emit('request', self.req)
 }
 
 Request.prototype.onRequestError = function (error) {
@@ -892,6 +959,8 @@ Request.prototype.onRequestError = function (error) {
 }
 
 Request.prototype.onRequestResponse = function (response) {
+  console.log("-780----self.req.on('response', self.onRequestResponse.bind(self)---作为http.request(options,callback)--中的callback-")
+
   var self = this
 
   if (self.timing) {
@@ -1187,7 +1256,7 @@ Request.prototype.abort = function () {
     self.req.abort()
   }
   else if (self.response) {
-    self.response.destroy()
+    self.response.destroy() //破坏
   }
 
   self.emit('abort')
@@ -1522,13 +1591,16 @@ Request.prototype.write = function () {
   }
 }
 Request.prototype.end = function (chunk) {
+  console.log('request---prototype----end----');
   var self = this
   if (self._aborted) {return}
 
   if (chunk) {
     self.write(chunk)
   }
+  console.log(self.req);
   if (!self._started) {
+    console.log('request---prototype----!self._started');
     self.start()
   }
   if (self.req) {
@@ -1570,3 +1642,212 @@ Request.defaultProxyHeaderExclusiveList =
 
 Request.prototype.toJSON = requestToJSON
 module.exports = Request
+
+
+ // ------callback-------- Socket {
+ //  connecting: true,
+ //  _hadError: false,
+ //  _handle: 
+ //   TCP {
+ //     bytesRead: 0,
+ //     _externalStream: {},
+ //     fd: -1,
+ //     reading: false,
+ //     owner: [Circular],
+ //     onread: [Function: onread],
+ //     onconnection: null,
+ //     writeQueueSize: 0 },
+ //  _parent: null,
+ //  _host: 'www.baidu.com',
+ //  _readableState: 
+ //   ReadableState {
+ //     objectMode: false,
+ //     highWaterMark: 16384,
+ //     buffer: BufferList { head: null, tail: null, length: 0 },
+ //     length: 0,
+ //     pipes: null,
+ //     pipesCount: 0,
+ //     flowing: true,
+ //     ended: false,
+ //     endEmitted: false,
+ //     reading: false,
+ //     sync: true,
+ //     needReadable: false,
+ //     emittedReadable: false,
+ //     readableListening: false,
+ //     resumeScheduled: true,
+ //     defaultEncoding: 'utf8',
+ //     ranOut: false,
+ //     awaitDrain: 0,
+ //     readingMore: false,
+ //     decoder: null,
+ //     encoding: null },
+ //  readable: false,
+ //  domain: null,
+ //  _events: 
+ //   { end: [ [Object], [Function: socketOnEnd] ],
+ //     finish: [Function: onSocketFinish],
+ //     _socketEnd: [Function: onSocketEnd],
+ //     connect: [ [Object], [Object] ],
+ //     free: [Function: onFree],
+ //     close: [ [Function: onClose], [Function: socketCloseListener] ],
+ //     agentRemove: [Function: onRemove],
+ //     drain: [Function: ondrain],
+ //     error: [Function: socketErrorListener],
+ //     data: [Function: socketOnData] },
+ //  _eventsCount: 10,
+ //  _maxListeners: undefined,
+ //  _writableState: 
+ //   WritableState {
+ //     objectMode: false,
+ //     highWaterMark: 16384,
+ //     needDrain: false,
+ //     ending: false,
+ //     ended: false,
+ //     finished: false,
+ //     decodeStrings: false,
+ //     defaultEncoding: 'utf8',
+ //     length: 98,
+ //     writing: true,
+ //     corked: 0,
+ //     sync: false,
+ //     bufferProcessing: false,
+ //     onwrite: [Function],
+ //     writecb: [Function: finish],
+ //     writelen: 98,
+ //     bufferedRequest: null,
+ //     lastBufferedRequest: null,
+ //     pendingcb: 1,
+ //     prefinished: false,
+ //     errorEmitted: false,
+ //     bufferedRequestCount: 0,
+ //     corkedRequestsFree: CorkedRequest { next: null, entry: null, finish: [Function] } },
+ //  writable: true,
+ //  allowHalfOpen: false,
+ //  destroyed: false,
+ //  _bytesDispatched: 0,
+ //  _sockname: null,
+ //  _pendingData: 'GET / HTTP/1.1\r\n0: [object Object]\r\n1: [object Object]\r\nhost: www.baidu.com\r\nConnection: close\r\n\r\n',
+ //  _pendingEncoding: 'latin1',
+ //  server: null,
+ //  _server: null,
+ //  parser: 
+ //   HTTPParser {
+ //     '0': [Function: parserOnHeaders],
+ //     '1': [Function: parserOnHeadersComplete],
+ //     '2': [Function: parserOnBody],
+ //     '3': [Function: parserOnMessageComplete],
+ //     '4': null,
+ //     _headers: [],
+ //     _url: '',
+ //     _consumed: false,
+ //     socket: [Circular],
+ //     incoming: null,
+ //     outgoing: 
+ //      ClientRequest {
+ //        domain: null,
+ //        _events: [Object],
+ //        _eventsCount: 4,
+ //        _maxListeners: undefined,
+ //        output: [],
+ //        outputEncodings: [],
+ //        outputCallbacks: [],
+ //        outputSize: 0,
+ //        writable: true,
+ //        _last: true,
+ //        upgrading: false,
+ //        chunkedEncoding: false,
+ //        shouldKeepAlive: false,
+ //        useChunkedEncodingByDefault: false,
+ //        sendDate: false,
+ //        _removedHeader: {},
+ //        _contentLength: 0,
+ //        _hasBody: true,
+ //        _trailer: '',
+ //        finished: true,
+ //        _headerSent: true,
+ //        socket: [Circular],
+ //        connection: [Circular],
+ //        _header: 'GET / HTTP/1.1\r\n0: [object Object]\r\n1: [object Object]\r\nhost: www.baidu.com\r\nConnection: close\r\n\r\n',
+ //        _headers: [Object],
+ //        _headerNames: [Object],
+ //        _onPendingData: null,
+ //        agent: [Object],
+ //        socketPath: undefined,
+ //        timeout: undefined,
+ //        method: 'GET',
+ //        path: '/',
+ //        _ended: false,
+ //        parser: [Circular] },
+ //     maxHeaderPairs: 2000,
+ //     onIncoming: [Function: parserOnIncomingClient] },
+ //  _httpMessage: 
+ //   ClientRequest {
+ //     domain: null,
+ //     _events: 
+ //      { socket: [Object],
+ //        response: [Function: bound ],
+ //        error: [Function: bound ],
+ //        drain: [Function] },
+ //     _eventsCount: 4,
+ //     _maxListeners: undefined,
+ //     output: [],
+ //     outputEncodings: [],
+ //     outputCallbacks: [],
+ //     outputSize: 0,
+ //     writable: true,
+ //     _last: true,
+ //     upgrading: false,
+ //     chunkedEncoding: false,
+ //     shouldKeepAlive: false,
+ //     useChunkedEncodingByDefault: false,
+ //     sendDate: false,
+ //     _removedHeader: {},
+ //     _contentLength: 0,
+ //     _hasBody: true,
+ //     _trailer: '',
+ //     finished: true,
+ //     _headerSent: true,
+ //     socket: [Circular],
+ //     connection: [Circular],
+ //     _header: 'GET / HTTP/1.1\r\n0: [object Object]\r\n1: [object Object]\r\nhost: www.baidu.com\r\nConnection: close\r\n\r\n',
+ //     _headers: { '0': [Object], '1': [Object], host: 'www.baidu.com' },
+ //     _headerNames: { '0': '0', '1': '1', host: 'host' },
+ //     _onPendingData: null,
+ //     agent: 
+ //      Agent {
+ //        domain: null,
+ //        _events: [Object],
+ //        _eventsCount: 1,
+ //        _maxListeners: undefined,
+ //        defaultPort: 80,
+ //        protocol: 'http:',
+ //        options: [Object],
+ //        requests: {},
+ //        sockets: [Object],
+ //        freeSockets: {},
+ //        keepAliveMsecs: 1000,
+ //        keepAlive: false,
+ //        maxSockets: Infinity,
+ //        maxFreeSockets: 256 },
+ //     socketPath: undefined,
+ //     timeout: undefined,
+ //     method: 'GET',
+ //     path: '/',
+ //     _ended: false,
+ //     parser: 
+ //      HTTPParser {
+ //        '0': [Function: parserOnHeaders],
+ //        '1': [Function: parserOnHeadersComplete],
+ //        '2': [Function: parserOnBody],
+ //        '3': [Function: parserOnMessageComplete],
+ //        '4': null,
+ //        _headers: [],
+ //        _url: '',
+ //        _consumed: false,
+ //        socket: [Circular],
+ //        incoming: null,
+ //        outgoing: [Circular],
+ //        maxHeaderPairs: 2000,
+ //        onIncoming: [Function: parserOnIncomingClient] } } }
+

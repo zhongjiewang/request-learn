@@ -139,6 +139,7 @@ util.inherits(Request, stream.Stream)
 
 // Debugging
 Request.debug = process.env.NODE_DEBUG && /\brequest\b/.test(process.env.NODE_DEBUG)
+console.log('request-----debug', Request.debug);
 function debug() {
   if (Request.debug) {
     console.error('REQUEST %s', util.format.apply(util, arguments))
@@ -191,10 +192,12 @@ Request.prototype.init = function (options) {
         return // Print a warning maybe?
       }
       self._callbackCalled = true
+      console.log('--call back 总回调-double callback--- function---');
       self._callback.apply(self, arguments)
     }
+    console.log('------------protect against double callback------------');
     //* bind 是返回对应函数，便于稍后调用；apply 、call 则是立即调用 。
-    self.on('error', self.callback.bind())
+    self.on('error', self.callback.bind()) //bind 中的参数可以省略
     self.on('complete', self.callback.bind(self, null))
   }
 
@@ -422,7 +425,7 @@ Request.prototype.init = function (options) {
     // NOTE: elapsedTime is deprecated in favor of .timings
     self.elapsedTime = self.elapsedTime || 0
   }
-
+  console.log('--------request---init---middle------');
   function setContentLength () {
     if (isTypedArray(self.body)) {
       self.body = Buffer.from(self.body)
@@ -732,7 +735,7 @@ Request.prototype.getNewAgent = function () {
 }
 
 Request.prototype.start = function () {
-  console.log('request-------start-------');
+  console.log('request-------start-------begin--');
   // start() is called once we are ready to send the outgoing HTTP request.
   // this is usually called on the first write(), end() or on nextTick()
   var self = this
@@ -830,6 +833,7 @@ Request.prototype.start = function () {
       timeout = self.timeout
     }
   }
+  // ------------- request------start------------ //
 // options 可以是一个对象、或字符串、或 URL 对象。 如果 options 是一个字符串，它会被自动使用 url.parse() 解析。 
 // If it is a URL object, it will be automatically converted to an ordinary options object.
 // 可选的 callback 参数会作为单次监听器被添加到 'response' 事件。
@@ -851,8 +855,9 @@ Request.prototype.start = function () {
     console.log('http req socket ------callback--------'); //scoket 进入tcp一层
     // `._connecting` was the old property which was made public in node v6.1.0
     var isConnecting = socket._connecting || socket.connecting
-    console.log('socket---connecting---',isConnecting); //true
+    console.log('socket---connecting---',isConnecting , self.timing); //true
     if (self.timing) {
+      console.log('self.timing---------',self.timing);
       self.timings.socket = now() - self.startTimeNow
 
       if (isConnecting) {
@@ -875,10 +880,12 @@ Request.prototype.start = function () {
       }
     }
 
+    console.log('before setReqTimeout--------------');
+
     var setReqTimeout = function() {
+      console.log('---setReqTimeout-------');
 //  此超时设置等待的时间量 * 发送的字节数
 // 从服务器连接后。
-
 // 特别是, 如果服务器无法发送 erroring, 它将非常有用
 // 通过流传输响应的中途数据。
       // This timeout sets the amount of time to wait *between* bytes sent
@@ -886,9 +893,18 @@ Request.prototype.start = function () {
       //
       // In particular, it's useful for erroring if the server fails to send
       // data halfway through streaming a response.
+      // request.setTimeout(timeout[, callback])#
+      // 新增于: v0.5.9
+      // timeout <number> 请求被认为是超时的毫秒数。
+      // callback <Function> 可选的函数，当超时发生时被调用。等同于绑定到 timeout 事件。
+      /*********特别注意下面这句话******/ // 个人理解是 传输时间超时
+      // 一旦 socket 被分配给请求且已连接，socket.setTimeout() 会被调用。
       self.req.setTimeout(timeout, function () {
         if (self.req) {
-          self.abort()
+          // request.abort()
+          // 新增于: v0.3.8
+          // 标记请求为终止。 调用该方法将使响应中剩余的数据被丢弃且 socket 被销毁。
+          self.abort()// 这里出发self.req self.response abort();
           var e = new Error('ESOCKETTIMEDOUT')
           e.code = 'ESOCKETTIMEDOUT'
           e.connect = false
@@ -896,6 +912,7 @@ Request.prototype.start = function () {
         }
       })
     }
+
     if (timeout !== undefined) {
       // Only start the connection timer if we're actually connecting a new
       // socket, otherwise if we're already connected (because this is a
@@ -903,23 +920,43 @@ Request.prototype.start = function () {
       // get a 'connect' event for an already connected socket.
       if (isConnecting) {
         var onReqSockConnect = function() {
+          //在这里清除timeout--, 这样就不会触发timeout;
+          // 1503385867584  这个时间是下面这行代码得到的
+          // 1503385867591  这个是服务器端server  Received a request 得到, 相差无几,
+          console.log('-------------onReqSockConnect-------connect---',new Date().getTime());
           socket.removeListener('connect', onReqSockConnect)
+          //这是socket层已经链接上了, 清除clearTimeout,
+          // 这时options.timeout已经没有用了,
+          //然后用了, self.req.setTimeout() 就是socket time out,
+          //即服务器并没有在http 层做出响应;
           clearTimeout(self.timeoutTimer)
           self.timeoutTimer = null
           setReqTimeout()
         }
 
-        socket.on('connect', onReqSockConnect)
+        var socketEnd = function () {
+          console.log('----socket--------End-----');
+        }
+
+        var socketTimeOut = function () {
+          console.log('----socket--------timeout  event-----');
+        }
+
+        // socket.setTimeout(100);
+        socket.on('connect', onReqSockConnect);
+        socket.on('timeout', socketTimeOut);
+        socket.on('end', socketEnd)
 
         self.req.on('error', function(err) {
           socket.removeListener('connect', onReqSockConnect)
         })
-
+        console.log('-------timeout----------');
         // Set a timeout in memory - this block will throw if the server takes more
         // than `timeout` to write the HTTP status and headers (corresponding to
         // the on('response') event on the client). NB: this measures wall-clock
         // time, not the time between bytes sent by the server.
         self.timeoutTimer = setTimeout(function () {
+         console.log(' timeoutTimer ----set', timeout);
           socket.removeListener('connect', onReqSockConnect)
           self.abort()
           var e = new Error('ETIMEDOUT')
@@ -927,16 +964,19 @@ Request.prototype.start = function () {
           e.connect = true
           self.emit('error', e)
         }, timeout)
+
+        console.log('after timeout-----timer');
       } else {
         // We're already connected
         setReqTimeout()
       }
     }
-    console.log('----------+++++++------self.emit(scoret---)---');
+    // console.log('----------+++++++------self.emit(scoret---)---');
     //self.emit('socket', socket)  //这两行代码现在 并没有起作用, 并没有做 监听 self.on('socket');
   }) // 都是在 req.scoket 回调中
-console.log('----------+++++++------self.emit(request)---');
+// console.log('----------+++++++------self.emit(request)---');
   // self.emit('request', self.req)
+  console.log('request-----start-------end-------');
 }
 
 Request.prototype.onRequestError = function (error) {
@@ -944,17 +984,27 @@ Request.prototype.onRequestError = function (error) {
   if (self._aborted) {
     return
   }
+  console.log('onRequestError-----', error);
+  console.log('req._reusedSocket--',self.req._reusedSocket);//重用socket
+  //add request no reuse 不再重新使用
+  console.log('agent.addRequestNoruse--',self.agent.addRequestNoreuse);//
+  console.log('error code---', error.code);
+
   if (self.req && self.req._reusedSocket && error.code === 'ECONNRESET'
       && self.agent.addRequestNoreuse) {
+    console.log('---------scoket connection reset by peer--对方复位链接');
     self.agent = { addRequest: self.agent.addRequestNoreuse.bind(self.agent) }
-    self.start()
+    self.start()//重新请求;
     self.req.end()
     return
   }
+  console.log('-++++++++++-onRequestError---++++++++++++++++');
+
   if (self.timeout && self.timeoutTimer) {
     clearTimeout(self.timeoutTimer)
     self.timeoutTimer = null
   }
+  console.log('---------onRequestError-----------------');
   self.emit('error', error)
 }
 
@@ -962,13 +1012,23 @@ Request.prototype.onRequestResponse = function (response) {
   console.log("-780----self.req.on('response', self.onRequestResponse.bind(self)---作为http.request(options,callback)--中的callback-")
 
   var self = this
-
+  // console.log(self.timeoutTimer);
+// time- 如果true，请求 - 响应周期（包括所有重定向）以毫秒分辨率计时。设置时，以下属性将添加到响应对象中
+// options.time = true => self.timing = true;
+// if (options.time) { //这是init 中部的设置,
+//     self.timing = true
+// 定时；调速；时间选择
   if (self.timing) {
+    //时间控制；时间安排；[计量] 计时（timing的复 timings
     self.timings.response = now() - self.startTimeNow
   }
 
   debug('onRequestResponse', self.uri.href, response.statusCode, response.headers)
+  console.log('onRequestResponse----self.timing--',self.timing , 'self.timings-:',self.timings);
+  //该方法会通知服务器，所有响应头和响应主体都已被发送，即服务器将其视为已完成。
+   // 每次响应都必须调用 response.end() 方法。
   response.on('end', function() {
+    console.log('response--------end---call-back--response.on--')
     if (self.timing) {
       self.timings.end = now() - self.startTimeNow
       response.timingStart = self.startTime
@@ -1009,9 +1069,12 @@ Request.prototype.onRequestResponse = function (response) {
         total: self.timings.end
       }
     }
+
+
     debug('response end', self.uri.href, response.statusCode, response.headers)
   })
 
+  console.log('++++++++++++++++++++++++++++=---------onrequestresponse---');
   if (self._aborted) {
     debug('aborted', self.uri.href)
     response.resume()
@@ -1043,13 +1106,16 @@ Request.prototype.onRequestResponse = function (response) {
   if (self.setHost) {
     self.removeHeader('host')
   }
+  console.log('before  onRequestResponse---timeout-------',self.timeout, self.timeoutTimer);
   if (self.timeout && self.timeoutTimer) {
+    console.log('onRequestResponse-----clearTimeout----');
     clearTimeout(self.timeoutTimer)
     self.timeoutTimer = null
   }
 
   var targetCookieJar = (self._jar && self._jar.setCookie) ? self._jar : globalCookieJar
   var addCookie = function (cookie) {
+    console.log('addCookie----',cookie);
     //set the cookie if it's domain in the href's domain.
     try {
       targetCookieJar.setCookie(cookie, self.uri.href, {ignoreError: true})
@@ -1057,11 +1123,14 @@ Request.prototype.onRequestResponse = function (response) {
       self.emit('error', e)
     }
   }
-
+  console.log('response---headers---',response.headers);
   response.caseless = caseless(response.headers)
+  // console.log('case less response---',response.caseless);
+  console.log('self _disableCookies---',self._disableCookies);
 
   if (response.caseless.has('set-cookie') && (!self._disableCookies)) {
-    var headerName = response.caseless.has('set-cookie')
+    var headerName = response.caseless.has('set-cookie'); //has some key return this key;
+    console.log('cookie headerName---', headerName);
     if (Array.isArray(response.headers[headerName])) {
       response.headers[headerName].forEach(addCookie)
     } else {
@@ -1075,12 +1144,14 @@ Request.prototype.onRequestResponse = function (response) {
     // Be a good stream and emit end when the response is finished.
     // Hack to emit end on close because of a core bug that never fires end
     response.on('close', function () {
+      console.log('response----close---event--', new Date().getTime());
       if (!self._ended) {
         self.response.emit('end')
       }
     })
 
     response.once('end', function () {
+      console.log('response----once end------change _ended =true');
       self._ended = true
     })
 
@@ -1095,7 +1166,7 @@ Request.prototype.onRequestResponse = function (response) {
         || code === 304
       )
     }
-
+    console.log('main----controler -----response------------');
     var responseContent
     if (self.gzip && !noBody(response.statusCode)) {
       var contentEncoding = response.headers['content-encoding'] || 'identity'
@@ -1146,7 +1217,7 @@ Request.prototype.onRequestResponse = function (response) {
     }
 
     self.responseContent = responseContent
-
+    console.log('self.emit ---- response------');
     self.emit('response', response)
 
     self.dests.forEach(function (dest) {
@@ -1163,7 +1234,11 @@ Request.prototype.onRequestResponse = function (response) {
       self._destdata = true
       self.emit('data', chunk)
     })
+// 以上例子中，emitter 为事件 someEvent 注册了两个事件监听器，然后触发了 someEvent 事件。
+// 运行结果中可以看到两个事件监听器回调函数被先后调用。 这就是EventEmitter最简单的用法。
     responseContent.once('end', function (chunk) {
+      console.log('responseContent---once----end----');
+      console.log('self emit "end event"------');
       self.emit('end', chunk)
     })
     responseContent.on('error', function (error) {
@@ -1172,6 +1247,7 @@ Request.prototype.onRequestResponse = function (response) {
     responseContent.on('close', function () {self.emit('close')})
 
     if (self.callback) {
+      console.log('self call  readResponseBody-----', typeof response);
       self.readResponseBody(response)
     }
     //if no callback
@@ -1190,13 +1266,15 @@ Request.prototype.onRequestResponse = function (response) {
 
 Request.prototype.readResponseBody = function (response) {
   var self = this
-  debug('reading response\'s body')
+  debug('reading response\'s body---------')
   var buffers = []
     , bufferLength = 0
     , strings = []
 
   self.on('data', function (chunk) {
+    console.log('isBuffer----', Buffer.isBuffer(chunk));
     if (!Buffer.isBuffer(chunk)) {
+      console.log('string-----chunk',chunk);
       strings.push(chunk)
     } else if (chunk.length) {
       bufferLength += chunk.length
@@ -1218,6 +1296,7 @@ Request.prototype.readResponseBody = function (response) {
       debug('has body', self.uri.href, bufferLength)
       response.body = Buffer.concat(buffers, bufferLength)
       if (self.encoding !== null) {
+        console.log('buffer------to _.isString--------');
         response.body = response.body.toString(self.encoding)
       }
       // `buffer` is defined in the parent scope and used in a closure it exists for the life of the Request.
@@ -1230,6 +1309,7 @@ Request.prototype.readResponseBody = function (response) {
       if (self.encoding === 'utf8' && strings[0].length > 0 && strings[0][0] === '\uFEFF') {
         strings[0] = strings[0].substring(1)
       }
+      console.log('strings length-------',strings.length);
       response.body = strings.join('')
     }
 
@@ -1244,6 +1324,11 @@ Request.prototype.readResponseBody = function (response) {
     if (typeof response.body === 'undefined' && !self._json) {
       response.body = self.encoding === null ? Buffer.alloc(0) : ''
     }
+    //* bind 是返回对应函数，便于稍后调用；apply 、call 则是立即调用 。
+    // self.on('error', self.callback.bind()) //参见 200行, init 中 ;
+    // self.on('complete', self.callback.bind(self, null))
+    //同样bind也可以有多个参数，并且参数可以执行的时候再次添加，但是要注意的是，参数是按照形参的顺序进行的
+    //上面的 null ,就是 callback 中的 error, 参数 可以bind的时候添加, 也可以调用的时候添加;但要按顺序;
     self.emit('complete', response, response.body)
   })
 }
@@ -1608,6 +1693,7 @@ Request.prototype.end = function (chunk) {
   }
 }
 Request.prototype.pause = function () {
+
   var self = this
   if (!self.responseContent) {
     self._paused = true

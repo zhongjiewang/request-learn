@@ -51,29 +51,32 @@ var now = require('performance-now');
 
 // console.log(Object.keys(obj));
 
-  var start = now();
+  // var start = now();
   
-  // Execute the code being timed.
-  for (let i = 0; i <= 10 ; i++) {
-      console.log('i',i);
-  }  
-  // Take a final timestamp.
-  //返回一个时间戳,以毫秒为单位,精确到千分之一毫秒
-  var end = now();
+  // // Execute the code being timed.
+  // for (let i = 0; i <= 10 ; i++) {
+  //     console.log('i',i);
+  // }  
+  // // Take a final timestamp.
+  // //返回一个时间戳,以毫秒为单位,精确到千分之一毫秒
+  // var end = now();
   
-  // Calculate the time taken and output the result in the console
-  console.log('doTasks took ' + (end - start) + ' milliseconds to execute.');
+  // // Calculate the time taken and output the result in the console
+  // console.log('doTasks took ' + (end - start) + ' milliseconds to execute.');
 
 
 
 let options = {
     baseUrl : '',
-    url: 'http://www.baidu.com',
+    // url: 'http://www.baidu.com',
+    url:'http://localhost:3001/',
     method: 'GET',
-    timeout: 1000
+    timeout: 1000,
+    // time: true
 }
 
-
+request.debug = true;
+// isObject()
 var baseRequest = request.defaults({
   headers:  [{
               "name": "Cookie",
@@ -86,12 +89,33 @@ var baseRequest = request.defaults({
 })
 
 baseRequest(options ,function (error, response, body) {
+  // console.log(response);
   console.log('error:', error); // Print the error if one occurred
   console.log('statusCode:', response && response.statusCode); // Print the response status code if a response was received
   console.log('body:', body.length); // Print the HTML for the Google homepage.
 });
 
 
+// var req = http.request(opt, function(res) {
+//     util.log('STATUS:', res.statusCode);
+//     res.setEncoding('utf8');
+//     var resultText = '';
+//     res.on('data', (chunk) => {
+//         resultText += chunk;
+//     });
+//     res.on('end', () => {
+//         console.log('------end---------');
+//         util.log(resultText);
+//     });
+// });
+
+// req.on('error', (e) => {
+//     console.log('-------------------',e);
+//     util.log(e);
+// });
+
+// util.log("start request...")
+// req.end();
 
 
 
